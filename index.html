@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>SEAT // CINEMATIC DRAW V9</title>
+  <title>SEAT // CINEMATIC DRAW V10</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,7 +12,7 @@
     <section id="setupView" class="setup-view" aria-label="자리배정 설정">
       <header class="app-header">
         <div>
-          <p class="kicker">SEAT ASSIGNMENT SHOW // V9</p>
+          <p class="kicker">SEAT ASSIGNMENT SHOW // V10</p>
           <h1>SEAT // CINEMATIC DRAW</h1>
           <p class="header-copy">Set the classroom. Lock seats. Then let the show begin.</p>
         </div>
@@ -92,13 +92,19 @@
         <section class="panel sound-panel">
           <div class="panel-head">
             <div><span class="panel-index">04</span><h2>AUDIO</h2></div>
-            <strong id="volumeValue">88%</strong>
+            <strong class="audio-summary"><span id="volumeValue">72%</span><span id="sfxVolumeValue">105%</span></strong>
           </div>
-          <label class="volume-control">
-            <span>MASTER VOLUME</span>
-            <input id="volumeInput" type="range" min="0" max="100" value="88" />
-          </label>
-          <p class="microcopy">BGM과 효과음의 전체 음량입니다.</p>
+          <div class="audio-mix-grid">
+            <label class="volume-control">
+              <span>BGM VOLUME</span>
+              <input id="volumeInput" type="range" min="0" max="100" value="72" />
+            </label>
+            <label class="volume-control">
+              <span>SFX VOLUME</span>
+              <input id="sfxVolumeInput" type="range" min="0" max="120" value="105" />
+            </label>
+          </div>
+          <p class="microcopy">음악과 효과음 음량을 각각 조절합니다. 효과음은 이전 버전보다 더 강하게 튜닝되어 있습니다.</p>
           <div class="bgm-library-block">
             <label>BGM LIBRARY
               <select id="bgmLibrarySelect">
