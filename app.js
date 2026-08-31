@@ -4,8 +4,12 @@
   const $ = (sel) => document.querySelector(sel);
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
   const COLORS = ['#36e7ff','#ff3bd4','#8b5cff','#b8ff45','#ff8a34','#ffe55d','#52f5a4','#4d7cff','#ff3f5f'];
-  const EVENT_POOL = ['drop','slot','laser','cards','rain','glitch','countdown','rgb','lightning','battle','race','dart','spotlight','elimination','pinball','conveyor','meteor','tug','sprint','rocket','penalty','archery','sumo','boat','rps','poker','baseball','dice'];
+  const EVENT_POOL = ['drop','slot','laser','cards','rain','glitch','countdown','rgb','lightning','battle','race','dart','spotlight','elimination','pinball','conveyor','meteor','tug','sprint','rocket','penalty','archery','sumo','boat','rps','poker','baseball','dice','bomb','throne','bowling','basketball','cannon','treasure','tournament','curling','stocks','batting','tank','cooking'];
   const SWAP_POOL = ['cross','portal','orbit','warp'];
+  const LOW_POWER = (navigator.hardwareConcurrency || 8) <= 4 || Math.min(window.innerWidth, window.innerHeight) < 700;
+  const PARTICLE_CAP = LOW_POWER ? 440 : 920;
+  const FX_SCALE = LOW_POWER ? .64 : 1;
+  const MAX_GAME_PLAYERS = 4;
 
   const els = {
     setupView: $('#setupView'), cinemaView: $('#cinemaView'), cinemaStage: $('#cinemaStage'),
@@ -171,7 +175,7 @@
       }
       if(hero===2)return rounds;
     }
-    return [{hero:'✊',opp:'✌',heroWin:true},{hero:'✋',opp:'✌',heroWin:false},{hero:'✌',opp:'✋',heroWin:true}];
+    return generateRpsMatch();
   }
 
   function generateDiceMatch() {
@@ -183,7 +187,7 @@
       }
       if(hero===2)return rounds;
     }
-    return [{hero:[6,4],opp:[2,5],heroWin:true},{hero:[2,4],opp:[6,3],heroWin:false},{hero:[5,5],opp:[3,4],heroWin:true}];
+    return generateDiceMatch();
   }
 
   function randomArcheryShot() {
@@ -199,7 +203,7 @@
       const hs=hero.reduce((s,x)=>s+x.score,0),os=opp.reduce((s,x)=>s+x.score,0);
       if(hs>os)return {hero,opp};
     }
-    return {hero:[{x:50,y:50,score:10},{x:56,y:45,score:9},{x:45,y:55,score:9}],opp:[{x:65,y:51,score:8},{x:61,y:62,score:7},{x:58,y:39,score:8}]};
+    return generateArcheryMatch();
   }
 
   function randomPkOutcome(){return weightedPick([['goal',.62],['save',.23],['miss',.15]]);}
@@ -216,7 +220,7 @@
         }
       }
     }
-    return {hero:['goal','save','goal','goal','miss'],opp:['goal','miss','save','goal','miss'],sudden:[]};
+    return generatePkMatch();
   }
 
   function generateBaseballMatch(){
@@ -233,7 +237,7 @@
         }
       }
     }
-    return {hero:['HR','OUT','HR'],opp:['OUT','HR','OUT'],bonus:[]};
+    return generateBaseballMatch();
   }
 
   const POKER_RANKS='23456789TJQKA'.split('');
@@ -267,6 +271,183 @@
       if(pokerCmp(he.key,oe.key)>0)return {hero,opp,board,heroName:he.name,oppName:oe.name};
     }
     return generatePokerMatch();
+  }
+
+
+  function uniqueFeaturedWinner(players, featured, valueOf, build, attempts=360) {
+    for(let attempt=0;attempt<attempts;attempt++){
+      const data=build();
+      const featuredValue=valueOf(data,featured);
+      if(players.every(p=>p===featured || featuredValue>valueOf(data,p)))return data;
+    }
+    return uniqueFeaturedWinner(players,featured,valueOf,build,attempts);
+  }
+
+  function generateThroneMatch(players, featured, rounds) {
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.scores.get(p),()=>{
+      const gains=new Map(),scores=new Map(players.map(p=>[p,0]));
+      players.forEach(p=>gains.set(p,Array.from({length:rounds},()=>randInt(1,6))));
+      players.forEach(p=>scores.set(p,gains.get(p).reduce((a,b)=>a+b,0)));
+      return {gains,scores};
+    });
+  }
+
+  function randomBowlingRoll(){return weightedPick([[10,.18],[9,.16],[8,.17],[7,.15],[6,.12],[5,.09],[4,.06],[3,.035],[2,.025],[1,.01],[0,.005]]);}
+  function generateBowlingMatch(players, featured) {
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.scores.get(p),()=>{
+      const rolls=new Map(),scores=new Map();
+      players.forEach(p=>{const r=[randomBowlingRoll(),randomBowlingRoll()];rolls.set(p,r);scores.set(p,r[0]+r[1]);});
+      return {rolls,scores};
+    });
+  }
+
+  function generateBasketballMatch(players, featured) {
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.scores.get(p),()=>{
+      const sequences=new Map(),scores=new Map();
+      players.forEach(p=>{const seq=Array.from({length:5},()=>Math.random()<.58);sequences.set(p,seq);scores.set(p,seq.filter(Boolean).length);});
+      return {sequences,scores};
+    });
+  }
+
+  function generateTreasureMatch(players, featured) {
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.scores.get(p),()=>{
+      const scores=new Map(players.map(p=>[p,randInt(8,100)]));return {scores};
+    });
+  }
+
+  function generateCannonPlan(featured, opponent) {
+    const players=[featured,opponent];
+    for(let attempt=0;attempt<500;attempt++){
+      const hp=new Map(players.map(p=>[p,100])),turns=[];let attacker=randomBool()?featured:opponent;
+      for(let turn=0;turn<14;turn++){
+        const defender=attacker===featured?opponent:featured,hit=Math.random()<.67,dmg=hit?randInt(13,31):0;
+        if(hit)hp.set(defender,Math.max(0,hp.get(defender)-dmg));
+        turns.push({attacker,defender,hit,dmg,hpAfter:hp.get(defender)});
+        if(hp.get(defender)<=0)break;
+        attacker=defender;
+      }
+      if(hp.get(opponent)<=0&&hp.get(featured)>0)return {turns,winner:featured};
+    }
+    return generateCannonPlan(featured,opponent);
+  }
+
+  function randomCurlingStone(){
+    const angle=Math.random()*Math.PI*2,radius=Math.pow(Math.random(),1.28)*47;
+    const x=50+Math.cos(angle)*radius,y=50+Math.sin(angle)*radius;
+    const score=Math.max(0,Math.round(100-radius*1.82));
+    return {x:+x.toFixed(1),y:+y.toFixed(1),score};
+  }
+  function generateCurlingMatch(players, featured) {
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.scores.get(p),()=>{
+      const stones=new Map(),scores=new Map();
+      players.forEach(p=>{const ss=Array.from({length:3},randomCurlingStone);stones.set(p,ss);scores.set(p,ss.reduce((a,b)=>a+b.score,0));});
+      return {stones,scores};
+    });
+  }
+
+  function randomStockPath(){
+    let price=100;const path=[price];
+    const drift=(Math.random()-.5)*1.2,vol=2.6+Math.random()*3.6;
+    for(let i=0;i<11;i++){
+      const shock=Math.random()<.10?(Math.random()-.5)*18:0;
+      price=clamp(price+drift+(Math.random()-.5)*vol*2+shock,38,185);
+      path.push(+price.toFixed(1));
+    }
+    return path;
+  }
+  function generateStockMatch(players, featured) {
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.paths.get(p).at(-1),()=>{
+      const paths=new Map(players.map(p=>[p,randomStockPath()]));return {paths};
+    });
+  }
+
+  const BATTING_OUTCOMES=[['OUT',.37,0],['1B',.21,1],['2B',.16,2],['3B',.06,3],['HR',.20,4]];
+  function randomBattingOutcome(){const key=weightedPick(BATTING_OUTCOMES.map(([k,w])=>[k,w]));return BATTING_OUTCOMES.find(x=>x[0]===key);}
+  function generateBattingMatch(players, featured) {
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.scores.get(p),()=>{
+      const atBats=new Map(),scores=new Map();
+      players.forEach(p=>{const seq=Array.from({length:5},()=>{const [label,,pts]=randomBattingOutcome();return {label,pts,angle:randInt(-42,42),distance:label==='HR'?randInt(82,100):label==='OUT'?randInt(35,74):randInt(52,84)};});atBats.set(p,seq);scores.set(p,seq.reduce((s,x)=>s+x.pts,0));});
+      return {atBats,scores};
+    });
+  }
+
+  function generateTankPlan(featured, opponent) {
+    for(let attempt=0;attempt<500;attempt++){
+      const hp=new Map([[featured,100],[opponent,100]]),turns=[];let attacker=randomBool()?featured:opponent;
+      for(let t=0;t<16;t++){
+        const defender=attacker===featured?opponent:featured,hit=Math.random()<.7,dmg=hit?randInt(12,29):0,crit=hit&&Math.random()<.12;
+        const finalDmg=crit?Math.min(38,dmg+randInt(6,12)):dmg;
+        if(hit)hp.set(defender,Math.max(0,hp.get(defender)-finalDmg));
+        turns.push({attacker,defender,hit,dmg:finalDmg,crit,hpAfter:hp.get(defender),arc:.35+Math.random()*.45});
+        if(hp.get(defender)<=0)break;attacker=defender;
+      }
+      if(hp.get(opponent)<=0&&hp.get(featured)>0)return {turns,winner:featured};
+    }
+    return generateTankPlan(featured,opponent);
+  }
+
+  const DISHES=['PASTA','STEAK','CURRY','RISOTTO','RAMEN','TACOS','OMELETTE','PAELLA'];
+  function generateCookingMatch(players, featured) {
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.totals.get(p),()=>{
+      const scores=new Map(),totals=new Map(),dishes=new Map();
+      players.forEach(p=>{
+        const rounds=[randInt(55,100),randInt(55,100),randInt(55,100)];scores.set(p,rounds);totals.set(p,rounds.reduce((a,b)=>a+b,0));dishes.set(p,pick(DISHES));
+      });
+      return {scores,totals,dishes};
+    });
+  }
+
+
+  function generateRacePaths(players, featured, steps=46) {
+    for(let attempt=0;attempt<500;attempt++){
+      const paths=new Map(),finals=new Map();
+      players.forEach(p=>{
+        let total=0;const base=.86+Math.random()*.34,surgeAt=randInt(Math.floor(steps*.25),Math.floor(steps*.82)),surge=.15+Math.random()*.38,vals=[];
+        for(let i=0;i<steps;i++){
+          const stumble=Math.random()<.035?-.28:0,burst=(i>=surgeAt&&i<surgeAt+randInt(3,8))?surge:0;
+          total+=Math.max(.25,base+(Math.random()-.5)*.62+burst+stumble);vals.push(total);
+        }
+        paths.set(p,vals);finals.set(p,total);
+      });
+      if(players.every(p=>p===featured||finals.get(featured)>finals.get(p)))return {paths,finals};
+    }
+    return generateRacePaths(players,featured,steps);
+  }
+
+  function generateHpDuelPlan(featured, opponent) {
+    for(let attempt=0;attempt<600;attempt++){
+      const hp=new Map([[featured,100],[opponent,100]]),turns=[];let attacker=randomBool()?featured:opponent;
+      for(let t=0;t<18;t++){
+        const defender=attacker===featured?opponent:featured,hit=Math.random()<.84,crit=hit&&Math.random()<.10,dmg=hit?randInt(9,22)+(crit?randInt(5,10):0):0;
+        if(hit)hp.set(defender,Math.max(0,hp.get(defender)-dmg));turns.push({attacker,defender,hit,crit,dmg,hpAfter:hp.get(defender)});if(hp.get(defender)<=0)break;attacker=defender;
+      }
+      if(hp.get(opponent)<=0&&hp.get(featured)>0)return {turns,winner:featured};
+    }
+    return generateHpDuelPlan(featured,opponent);
+  }
+
+  function generateBombOrder(players, featured){
+    for(let attempt=0;attempt<100;attempt++){const order=shuffle(players);if(order.at(-1)===featured)return order;}return generateBombOrder(players,featured);
+  }
+
+  function generateTugPath(heroLeft, steps=28){
+    const wanted=heroLeft?-1:1;
+    for(let attempt=0;attempt<500;attempt++){
+      let pull=0;const path=[];const drift=(Math.random()-.5)*2.2;
+      for(let i=0;i<steps;i++){pull=clamp(pull+(Math.random()-.5)*28+drift,-128,128);path.push(pull);}
+      if(Math.sign(path.at(-1))===wanted&&Math.abs(path.at(-1))>42)return path;
+    }
+    return generateTugPath(heroLeft,steps);
+  }
+
+  function generateTournamentPlan(players, featured){
+    for(let attempt=0;attempt<500;attempt++){
+      const seeded=shuffle(players),semiPairs=[[seeded[0],seeded[1]],[seeded[2],seeded[3]]],semis=[];
+      for(const [a,b] of semiPairs){let as=randInt(1,9),bs=randInt(1,9);while(as===bs)bs=randInt(1,9);semis.push({a,b,as,bs,winner:as>bs?a:b});}
+      let a=semis[0].winner,b=semis[1].winner,as=randInt(1,9),bs=randInt(1,9);while(as===bs)bs=randInt(1,9);const final={a,b,as,bs,winner:as>bs?a:b};
+      if(final.winner===featured)return {seeded,semis,final};
+    }
+    return generateTournamentPlan(players,featured);
   }
 
   function shuffle(arr) {
@@ -629,6 +810,18 @@
       case 'poker': await eventPoker(name,seat,availableSeats,studentPool); break;
       case 'baseball': await eventBaseball(name,seat,availableSeats,studentPool); break;
       case 'dice': await eventDice(name,seat,availableSeats,studentPool); break;
+      case 'bomb': await eventBomb(name,seat,availableSeats,studentPool); break;
+      case 'throne': await eventThrone(name,seat,availableSeats,studentPool); break;
+      case 'bowling': await eventBowling(name,seat,availableSeats,studentPool); break;
+      case 'basketball': await eventBasketball(name,seat,availableSeats,studentPool); break;
+      case 'cannon': await eventCannon(name,seat,availableSeats,studentPool); break;
+      case 'treasure': await eventTreasure(name,seat,availableSeats,studentPool); break;
+      case 'tournament': await eventTournament(name,seat,availableSeats,studentPool); break;
+      case 'curling': await eventCurling(name,seat,availableSeats,studentPool); break;
+      case 'stocks': await eventStocks(name,seat,availableSeats,studentPool); break;
+      case 'batting': await eventBatting(name,seat,availableSeats,studentPool); break;
+      case 'tank': await eventTank(name,seat,availableSeats,studentPool); break;
+      case 'cooking': await eventCooking(name,seat,availableSeats,studentPool); break;
       default: await eventDrop(name,seat);
     }
     setProgress(20 + ((index + 1) / total) * 72);
@@ -700,31 +893,17 @@
   }
 
   async function eventBattle(name, seat, pool, studentPool) {
-    const opponents=studentPool.filter(n=>n!==name); if(!opponents.length){await eventLaser(name,seat,pool);return;}
-    const opponent=pick(opponents), duel=duelOrder(name,opponent), heroColor=colorForName(name), oppColor=colorForName(opponent); setEventColor(heroColor); setEvent('BATTLE EVENT','FIGHT'); hideEventLayer();
+    const opponents=studentPool.filter(n=>n!==name);if(!opponents.length){await eventLaser(name,seat,pool);return;}const opponent=pick(opponents),duel=duelOrder(name,opponent),plan=generateHpDuelPlan(name,opponent),heroColor=colorForName(name);setEventColor(heroColor);setEvent('BATTLE EVENT','FIGHT');hideEventLayer();
     const fighter=(n,c,side)=>{const d=document.createElement('div');d.className=`fighter-card fighter-${side}`;d.style.setProperty('--fighter-color',c);d.innerHTML=`<div class="fighter-tag">${side==='left'?'PLAYER 1':'PLAYER 2'}</div><div class="fighter-avatar"><i class="head"></i><i class="body"></i><i class="arm a1"></i><i class="arm a2"></i><i class="leg l1"></i><i class="leg l2"></i></div><div class="fighter-name">${escapeHtml(n)}</div><div class="hp-readout"><span>HP</span><b>100</b></div><div class="hp"><i></i></div>`;return d;};
-    const left=fighter(duel.leftName,colorForName(duel.leftName),'left'), right=fighter(duel.rightName,colorForName(duel.rightName),'right'), vs=document.createElement('div'); vs.className='battle-vs'; vs.textContent='VS'; els.battleField.append(left,vs,right); els.battleField.classList.add('active-layer'); audio.battleStart(); await wait(1500);
-    const heroCard=duel.heroLeft?left:right, oppCard=duel.heroLeft?right:left;
-    let hpHero=100,hpOpp=100; const heroBar=heroCard.querySelector('.hp i'),oppBar=oppCard.querySelector('.hp i'),heroNum=heroCard.querySelector('.hp-readout b'),oppNum=oppCard.querySelector('.hp-readout b');
-    const strike=async(attacker,defender,color,nx)=>{attacker.classList.add('attack');defender.classList.add('hit');audio.hit();particlesBurst(nx,.48,30,color,.72);screenImpact();await wait(640);attacker.classList.remove('attack');defender.classList.remove('hit');await wait(340);};
-    for(let round=0;round<6;round++){
-      const dmgOpp=11+Math.floor(Math.random()*8); hpOpp=Math.max(round===5?6:18,hpOpp-dmgOpp); oppBar.style.width=`${hpOpp}%`;oppNum.textContent=hpOpp;await strike(heroCard,oppCard,heroColor,duel.heroLeft?.68:.32);
-      if(round<5){const dmgHero=7+Math.floor(Math.random()*7); hpHero=Math.max(36,hpHero-dmgHero); heroBar.style.width=`${hpHero}%`;heroNum.textContent=hpHero;await strike(oppCard,heroCard,oppColor,duel.heroLeft?.32:.68);}
-    }
-    heroCard.classList.add('finisher'); await wait(650); hpOpp=0;oppBar.style.width='0%';oppNum.textContent='0';oppCard.classList.add('knockout');audio.explosion();particlesBurst(duel.heroLeft?.68:.32,.48,150,heroColor,1.8);impactWaves(duel.heroLeft?.68:.32,.48,5,70);screenImpact();await wait(1200);heroCard.classList.add('winner');fireworks(5,heroColor);audio.victorySting();await wait(1200);els.battleField.classList.remove('active-layer');
-    setEvent('WINNER',name);await wait(700);for(const s of shuffle(pool).slice(0,Math.min(10,pool.length))){seatPulse(s);await wait(120)}setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
+    const left=fighter(duel.leftName,colorForName(duel.leftName),'left'),right=fighter(duel.rightName,colorForName(duel.rightName),'right'),vs=document.createElement('div');vs.className='battle-vs';vs.textContent='VS';els.battleField.append(left,vs,right);els.battleField.classList.add('active-layer');audio.battleStart();await wait(1300);const cardFor=p=>p===duel.leftName?left:right;
+    for(const turn of plan.turns){const att=cardFor(turn.attacker),def=cardFor(turn.defender);att.classList.add('attack');if(turn.hit){def.classList.add('hit');def.querySelector('.hp i').style.width=`${turn.hpAfter}%`;def.querySelector('.hp-readout b').textContent=turn.hpAfter;audio.hit();particlesBurst(def===left?.32:.68,.48,turn.crit?42:26,colorForName(turn.attacker),turn.crit?.9:.6);if(turn.crit)screenImpact();}else{audio.whoosh();}await wait(520);att.classList.remove('attack');def.classList.remove('hit');if(turn.hpAfter<=0){def.classList.add('knockout');audio.explosion();screenImpact();await wait(650);break;}await wait(220);}
+    const heroCard=cardFor(name);heroCard.classList.add('winner');particlesBurst(duel.heroLeft?.68:.32,.48,140,heroColor,1.6);fireworks(5,heroColor);audio.victorySting();await wait(1250);els.battleField.classList.remove('active-layer');setEvent('WINNER',name);await wait(650);for(const s of shuffle(pool).slice(0,Math.min(10,pool.length))){seatPulse(s);await wait(105)}setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
   }
 
   async function eventRace(name, seat, pool, studentPool) {
-    const others=shuffle(studentPool.filter(n=>n!==name)).slice(0,3);const racers=shuffle([name,...others]);if(racers.length<2){await eventPinball(name,seat,pool);return;}
-    setEvent('HORSE RACE','RACE');hideEventLayer();const title=document.createElement('div');title.className='race-title';title.textContent='GRAND SEAT DERBY';els.raceField.appendChild(title);
-    const laneData=racers.map((r,idx)=>{const lane=document.createElement('div');lane.className='race-lane';lane.style.setProperty('--racer-color',colorForName(r));lane.innerHTML=`<div class="race-lane-no">${idx+1}</div><div class="race-track"><i class="finish-line"></i><i class="race-start-line"></i></div><div class="horse"><span class="horse-icon">🐎</span><b>${escapeHtml(r)}</b></div>`;els.raceField.appendChild(lane);return{r,lane,horse:lane.querySelector('.horse'),p:8};});
-    els.raceField.classList.add('active-layer');audio.raceStart();await wait(1000);for(const n of [3,2,1]){title.textContent=String(n);audio.countdown(n);await wait(720)}title.textContent='GO!';audio.explosion();await wait(450);
-    for(let step=0;step<48;step++){
-      for(const x of laneData){let inc=.9+Math.random()*1.15;if(x.r===name&&step>33)inc+=.38;x.p=Math.min(x.p+inc,x.r===name?90:89);x.horse.style.left=`${x.p}%`;}
-      if(step%3===0)audio.tick(245+step*6,.021);if(step===17||step===31){particlesBurst(.52,.78,44,pick(COLORS),.48);audio.whoosh();}await wait(185);
-    }
-    const winner=laneData.find(x=>x.r===name);title.textContent='FINAL SPRINT';winner.horse.style.transition='left 1.2s cubic-bezier(.12,.72,.12,1)';winner.horse.style.left='97%';audio.finalRise();await wait(1250);winner.lane.classList.add('winner','finish-crossed');audio.victorySting();fireworks(6,colorForName(name));await wait(1500);els.raceField.classList.remove('active-layer');setEvent('WINNER',name);await wait(700);for(const s of shuffle(pool).slice(0,Math.min(9,pool.length))){seatPulse(s);await wait(115)}setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
+    const others=shuffle(studentPool.filter(n=>n!==name)).slice(0,3),racers=shuffle([name,...others]);if(racers.length<2){await eventPinball(name,seat,pool);return;}const match=generateRacePaths(racers,name,48);setEvent('HORSE RACE','RACE');hideEventLayer();const title=document.createElement('div');title.className='race-title';title.textContent='GRAND SEAT DERBY';els.raceField.appendChild(title);
+    const maxFinal=Math.max(...[...match.finals.values()]);const laneData=racers.map((r,idx)=>{const lane=document.createElement('div');lane.className='race-lane';lane.style.setProperty('--racer-color',colorForName(r));lane.innerHTML=`<div class="race-lane-no">${idx+1}</div><div class="race-track"><i class="finish-line"></i><i class="race-start-line"></i></div><div class="horse"><span class="horse-icon">🐎</span><b>${escapeHtml(r)}</b></div>`;els.raceField.appendChild(lane);return{r,lane,horse:lane.querySelector('.horse')};});els.raceField.classList.add('active-layer');audio.raceStart();await wait(950);for(const n of [3,2,1]){title.textContent=String(n);audio.countdown(n);await wait(680)}title.textContent='GO!';audio.explosion();await wait(350);
+    for(let step=0;step<48;step++){for(const x of laneData){const raw=match.paths.get(x.r)[step],p=8+(raw/maxFinal)*81;x.horse.style.left=`${p}%`;}if(step%3===0)audio.tick(245+step*6,.021);if(step===17||step===31){particlesBurst(.52,.78,38,pick(COLORS),.42);audio.whoosh();}await wait(175);}const winner=laneData.find(x=>x.r===name);title.textContent='FINISH LINE';winner.horse.style.transition='left 1.05s cubic-bezier(.12,.72,.12,1)';winner.horse.style.left='97%';await wait(1100);winner.lane.classList.add('winner','finish-crossed');audio.victorySting();fireworks(6,colorForName(name));await wait(1350);els.raceField.classList.remove('active-layer');setEvent('WINNER',name);await wait(650);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
   }
 
   async function eventSpotlight(name, seat, pool) {
@@ -792,24 +971,19 @@
   }
 
   async function eventTug(name, seat, pool, studentPool) {
-    const opponents=studentPool.filter(n=>n!==name);if(!opponents.length){await eventBattle(name,seat,pool,studentPool);return;}const opponent=pick(opponents), duel=duelOrder(name,opponent), heroLeft=duel.heroLeft;setEvent('TUG OF WAR','VS');hideEventLayer();
-    const wrap=document.createElement('div');wrap.className='tug-arena tug-v5';wrap.style.setProperty('--left-color',colorForName(duel.leftName));wrap.style.setProperty('--right-color',colorForName(duel.rightName));wrap.innerHTML=`<div class="tug-ground"></div><div class="tug-center-line"></div><div class="tug-player left"><div class="tug-human"><i class="head"></i><i class="body"></i><i class="arm a1"></i><i class="arm a2"></i><i class="leg l1"></i><i class="leg l2"></i></div><strong>${escapeHtml(duel.leftName)}</strong></div><div class="tug-player right"><div class="tug-human"><i class="head"></i><i class="body"></i><i class="arm a1"></i><i class="arm a2"></i><i class="leg l1"></i><i class="leg l2"></i></div><strong>${escapeHtml(duel.rightName)}</strong></div><div class="tug-rope"><span class="rope-knot">◆</span><i class="rope-flag"></i></div>`;els.tugField.appendChild(wrap);els.tugField.classList.add('active-layer');audio.battleStart();await wait(1200);for(const n of [3,2,1]){wrap.dataset.count=n;audio.countdown(n);await wait(720)}wrap.dataset.count='';
-    const rope=wrap.querySelector('.tug-rope'),left=wrap.querySelector('.tug-player.left'),right=wrap.querySelector('.tug-player.right');let pull=0, sign=heroLeft?-1:1;
-    for(let i=0;i<28;i++){const late=i>18;const target=late?sign*(20+(i-18)*11):Math.sin(i*1.16)*26+(Math.random()-.5)*12;pull+=(target-pull)*.62;rope.style.transform=`translate(-50%,-50%) translateX(${pull}px)`;left.style.transform=`translate(-50%,-50%) translateX(${clamp(pull*.25,-30,30)}px) rotate(${clamp(-6-pull*.03,-20,16)}deg)`;right.style.transform=`translate(50%,-50%) translateX(${clamp(pull*.25,-30,30)}px) rotate(${clamp(6-pull*.03,-16,20)}deg)`;audio.tick(170+i*9,.019);if(i%6===0)particlesBurst(.5,.58,14,pick(COLORS),.28);await wait(285);} 
-    if(heroLeft){wrap.classList.add('left-wins');rope.style.transform='translate(-50%,-50%) translateX(-145px)';right.style.transform='translate(18%,-44%) rotate(-20deg)';}else{wrap.classList.add('right-wins');rope.style.transform='translate(-50%,-50%) translateX(145px)';left.style.transform='translate(-118%,-44%) rotate(20deg)';}
-    audio.explosion();screenImpact();particlesBurst(heroLeft?.36:.64,.53,135,colorForName(name),1.6);fireworks(5,colorForName(name));await wait(1500);els.tugField.classList.remove('active-layer');setEvent('WINNER',name);await wait(700);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
+    const opponents=studentPool.filter(n=>n!==name);if(!opponents.length){await eventBattle(name,seat,pool,studentPool);return;}const opponent=pick(opponents),duel=duelOrder(name,opponent),heroLeft=duel.heroLeft,path=generateTugPath(heroLeft);setEvent('TUG OF WAR','VS');hideEventLayer();
+    const wrap=document.createElement('div');wrap.className='tug-arena tug-v5';wrap.style.setProperty('--left-color',colorForName(duel.leftName));wrap.style.setProperty('--right-color',colorForName(duel.rightName));wrap.innerHTML=`<div class="tug-ground"></div><div class="tug-center-line"></div><div class="tug-player left"><div class="tug-human"><i class="head"></i><i class="body"></i><i class="arm a1"></i><i class="arm a2"></i><i class="leg l1"></i><i class="leg l2"></i></div><strong>${escapeHtml(duel.leftName)}</strong></div><div class="tug-player right"><div class="tug-human"><i class="head"></i><i class="body"></i><i class="arm a1"></i><i class="arm a2"></i><i class="leg l1"></i><i class="leg l2"></i></div><strong>${escapeHtml(duel.rightName)}</strong></div><div class="tug-rope"><span class="rope-knot">◆</span><i class="rope-flag"></i></div>`;els.tugField.appendChild(wrap);els.tugField.classList.add('active-layer');audio.battleStart();await wait(1000);for(const n of [3,2,1]){wrap.dataset.count=n;audio.countdown(n);await wait(650)}wrap.dataset.count='';const rope=wrap.querySelector('.tug-rope'),left=wrap.querySelector('.tug-player.left'),right=wrap.querySelector('.tug-player.right');
+    for(let i=0;i<path.length;i++){const pull=path[i];rope.style.transform=`translate(-50%,-50%) translateX(${pull}px)`;left.style.transform=`translate(-50%,-50%) translateX(${clamp(pull*.25,-30,30)}px) rotate(${clamp(-6-pull*.03,-20,16)}deg)`;right.style.transform=`translate(50%,-50%) translateX(${clamp(pull*.25,-30,30)}px) rotate(${clamp(6-pull*.03,-16,20)}deg)`;audio.tick(170+i*9,.019);if(i%6===0)particlesBurst(.5,.58,12,pick(COLORS),.24);await wait(265);}if(heroLeft){wrap.classList.add('left-wins');rope.style.transform='translate(-50%,-50%) translateX(-145px)';}else{wrap.classList.add('right-wins');rope.style.transform='translate(-50%,-50%) translateX(145px)';}audio.explosion();screenImpact();particlesBurst(heroLeft?.36:.64,.53,125,colorForName(name),1.45);fireworks(5,colorForName(name));await wait(1350);els.tugField.classList.remove('active-layer');setEvent('WINNER',name);await wait(650);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
   }
 
   async function eventSprint(name, seat, pool, studentPool) {
-    const others=shuffle(studentPool.filter(n=>n!==name)).slice(0,3);const runners=shuffle([name,...others]);if(runners.length<2){await eventRace(name,seat,pool,studentPool);return;}setEvent('SPRINT','100M');hideEventLayer();
-    const title=document.createElement('div');title.className='sprint-title';title.textContent='100M SPRINT';els.sprintField.appendChild(title);const data=runners.map((r,i)=>{const lane=document.createElement('div');lane.className='sprint-lane';lane.style.setProperty('--runner-color',colorForName(r));lane.innerHTML=`<span class="lane-id">${i+1}</span><div class="runner"><span class="runner-person"><i class="r-head"></i><i class="r-body"></i><i class="r-arm a"></i><i class="r-arm b"></i><i class="r-leg a"></i><i class="r-leg b"></i></span><b>${escapeHtml(r)}</b></div><i class="sprint-finish"></i>`;els.sprintField.appendChild(lane);return{r,runner:lane.querySelector('.runner'),p:6,lane};});els.sprintField.classList.add('active-layer');audio.raceStart();await wait(900);for(const n of [3,2,1]){title.textContent=String(n);audio.countdown(n);await wait(680)}title.textContent='GO!';audio.explosion();await wait(350);
-    for(let step=0;step<46;step++){for(const x of data){let inc=1+Math.random()*1.15;if(x.r===name&&step>32)inc+=.35;x.p=Math.min(x.p+inc,x.r===name?89:88);x.runner.style.left=`${x.p}%`;}if(step%2===0)audio.tick(285+step*6,.018);await wait(180);}const w=data.find(x=>x.r===name);title.textContent='PHOTO FINISH';w.runner.style.transition='left 1.05s cubic-bezier(.12,.72,.12,1)';w.runner.style.left='96%';await wait(1100);w.lane.classList.add('winner','finish-crossed');audio.victorySting();fireworks(5,colorForName(name));await wait(1400);els.sprintField.classList.remove('active-layer');setEvent('WINNER',name);await wait(700);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
+    const others=shuffle(studentPool.filter(n=>n!==name)).slice(0,3),runners=shuffle([name,...others]);if(runners.length<2){await eventRace(name,seat,pool,studentPool);return;}const match=generateRacePaths(runners,name,46),maxFinal=Math.max(...[...match.finals.values()]);setEvent('SPRINT','100M');hideEventLayer();const title=document.createElement('div');title.className='sprint-title';title.textContent='100M SPRINT';els.sprintField.appendChild(title);const data=runners.map((r,i)=>{const lane=document.createElement('div');lane.className='sprint-lane';lane.style.setProperty('--runner-color',colorForName(r));lane.innerHTML=`<span class="lane-id">${i+1}</span><div class="runner"><span class="runner-person"><i class="r-head"></i><i class="r-body"></i><i class="r-arm a"></i><i class="r-arm b"></i><i class="r-leg a"></i><i class="r-leg b"></i></span><b>${escapeHtml(r)}</b></div><i class="sprint-finish"></i>`;els.sprintField.appendChild(lane);return{r,runner:lane.querySelector('.runner'),lane};});els.sprintField.classList.add('active-layer');audio.raceStart();await wait(850);for(const n of [3,2,1]){title.textContent=String(n);audio.countdown(n);await wait(650)}title.textContent='GO!';audio.explosion();await wait(300);
+    for(let step=0;step<46;step++){for(const x of data){const raw=match.paths.get(x.r)[step],p=6+(raw/maxFinal)*83;x.runner.style.left=`${p}%`;}if(step%2===0)audio.tick(285+step*6,.018);await wait(170);}const w=data.find(x=>x.r===name);title.textContent='PHOTO FINISH';w.runner.style.transition='left 1s cubic-bezier(.12,.72,.12,1)';w.runner.style.left='96%';await wait(1050);w.lane.classList.add('winner','finish-crossed');audio.victorySting();fireworks(5,colorForName(name));await wait(1300);els.sprintField.classList.remove('active-layer');setEvent('WINNER',name);await wait(650);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
   }
 
   async function eventRocket(name, seat, pool, studentPool) {
-    const others=shuffle(studentPool.filter(n=>n!==name)).slice(0,3);const racers=shuffle([name,...others]);if(racers.length<2){await eventMeteor(name,seat,pool);return;}setEvent('ROCKET RACE','LAUNCH');hideEventLayer();
-    const sky=document.createElement('div');sky.className='rocket-sky';sky.innerHTML='<i class="rocket-finish"></i><strong class="rocket-title">ROCKET RACE</strong>';els.rocketField.appendChild(sky);const data=racers.map((r,i)=>{const rocket=document.createElement('div');rocket.className='rocket-racer';rocket.style.setProperty('--rocket-color',colorForName(r));rocket.style.left=`${14+i*(72/Math.max(1,racers.length-1))}%`;rocket.innerHTML=`<b>${escapeHtml(r)}</b><span>▲</span><i></i>`;sky.appendChild(rocket);return{r,rocket,p:5};});els.rocketField.classList.add('active-layer');const rocketTitle=sky.querySelector('.rocket-title');audio.warning();await wait(800);for(const n of [3,2,1]){rocketTitle.textContent=String(n);audio.countdown(n);await wait(670)}rocketTitle.textContent='LAUNCH!';audio.explosion();particlesBurst(.5,.82,110,null,1.35);await wait(350);rocketTitle.textContent='';
-    for(let step=0;step<44;step++){for(const x of data){let inc=.9+Math.random()*1.05;if(x.r===name&&step>31)inc+=.36;x.p=Math.min(x.p+inc,x.r===name?75:72);x.rocket.style.bottom=`${x.p}%`;}if(step%3===0)audio.whoosh();await wait(185);}const w=data.find(x=>x.r===name);w.rocket.style.transition='bottom 1.2s cubic-bezier(.12,.72,.12,1)';w.rocket.style.bottom='86%';audio.finalRise();await wait(1250);w.rocket.classList.add('winner','finish-crossed');audio.victorySting();fireworks(7,colorForName(name));await wait(1450);els.rocketField.classList.remove('active-layer');setEvent('WINNER',name);await wait(700);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
+    const others=shuffle(studentPool.filter(n=>n!==name)).slice(0,3),racers=shuffle([name,...others]);if(racers.length<2){await eventMeteor(name,seat,pool);return;}const match=generateRacePaths(racers,name,44),maxFinal=Math.max(...[...match.finals.values()]);setEvent('ROCKET RACE','LAUNCH');hideEventLayer();const sky=document.createElement('div');sky.className='rocket-sky';sky.innerHTML='<i class="rocket-finish"></i><strong class="rocket-title">ROCKET RACE</strong>';els.rocketField.appendChild(sky);const data=racers.map((r,i)=>{const rocket=document.createElement('div');rocket.className='rocket-racer';rocket.style.setProperty('--rocket-color',colorForName(r));rocket.style.left=`${14+i*(72/Math.max(1,racers.length-1))}%`;rocket.innerHTML=`<b>${escapeHtml(r)}</b><span>▲</span><i></i>`;sky.appendChild(rocket);return{r,rocket};});els.rocketField.classList.add('active-layer');const rocketTitle=sky.querySelector('.rocket-title');audio.warning();await wait(750);for(const n of [3,2,1]){rocketTitle.textContent=String(n);audio.countdown(n);await wait(640)}rocketTitle.textContent='LAUNCH!';audio.explosion();particlesBurst(.5,.82,95,null,1.15);await wait(300);rocketTitle.textContent='';
+    for(let step=0;step<44;step++){for(const x of data){const raw=match.paths.get(x.r)[step],p=5+(raw/maxFinal)*72;x.rocket.style.bottom=`${p}%`;}if(step%3===0)audio.whoosh();await wait(175);}const w=data.find(x=>x.r===name);w.rocket.style.transition='bottom 1.05s cubic-bezier(.12,.72,.12,1)';w.rocket.style.bottom='86%';await wait(1100);w.rocket.classList.add('winner','finish-crossed');audio.victorySting();fireworks(7,colorForName(name));await wait(1300);els.rocketField.classList.remove('active-layer');setEvent('WINNER',name);await wait(650);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
   }
 
   async function eventPenalty(name, seat, pool, studentPool) {
@@ -840,8 +1014,8 @@
   }
 
   async function eventBoat(name, seat, pool, studentPool) {
-    const others=shuffle(studentPool.filter(n=>n!==name)).slice(0,2),racers=shuffle([name,...others]);if(racers.length<2){await eventRace(name,seat,pool,studentPool);return;}setEvent('BOAT RACE','FINAL REGATTA');hideEventLayer();const sea=document.createElement('div');sea.className='boat-arena';sea.innerHTML='<strong class="boat-title">FINAL REGATTA</strong>';const data=racers.map((r,i)=>{const lane=document.createElement('div');lane.className='boat-lane';lane.style.setProperty('--boat-color',colorForName(r));lane.innerHTML=`<i class="boat-finish"></i><div class="boat"><span class="boat-graphic"><i class="mast"></i><i class="sail"></i><i class="hull"></i><i class="wake"></i></span><b>${escapeHtml(r)}</b></div>`;sea.appendChild(lane);return{r,lane,boat:lane.querySelector('.boat'),p:7};});els.raceField.appendChild(sea);els.raceField.classList.add('active-layer');const boatTitle=sea.querySelector('.boat-title');await wait(950);for(const n of [3,2,1]){boatTitle.textContent=String(n);audio.countdown(n);await wait(680)}boatTitle.textContent='GO!';audio.explosion();await wait(350);boatTitle.textContent='';
-    for(let step=0;step<46;step++){for(const x of data){let inc=.95+Math.random()*1.15;if(x.r===name&&step>32)inc+=.34;x.p=Math.min(x.p+inc,x.r===name?89:88);x.boat.style.left=`${x.p}%`;}if(step%3===0)audio.whoosh();await wait(185);}const win=data.find(x=>x.r===name);win.boat.style.transition='left 1.15s cubic-bezier(.12,.72,.12,1)';win.boat.style.left='96%';await wait(1200);win.lane.classList.add('winner','finish-crossed');fireworks(5,colorForName(name));audio.victorySting();await wait(1450);els.raceField.classList.remove('active-layer');setEvent('WINNER',name);await wait(700);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
+    const others=shuffle(studentPool.filter(n=>n!==name)).slice(0,2),racers=shuffle([name,...others]);if(racers.length<2){await eventRace(name,seat,pool,studentPool);return;}const match=generateRacePaths(racers,name,46),maxFinal=Math.max(...[...match.finals.values()]);setEvent('BOAT RACE','FINAL REGATTA');hideEventLayer();const sea=document.createElement('div');sea.className='boat-arena';sea.innerHTML='<strong class="boat-title">FINAL REGATTA</strong>';const data=racers.map(r=>{const lane=document.createElement('div');lane.className='boat-lane';lane.style.setProperty('--boat-color',colorForName(r));lane.innerHTML=`<i class="boat-finish"></i><div class="boat"><span class="boat-graphic"><i class="mast"></i><i class="sail"></i><i class="hull"></i><i class="wake"></i></span><b>${escapeHtml(r)}</b></div>`;sea.appendChild(lane);return{r,lane,boat:lane.querySelector('.boat')};});els.raceField.appendChild(sea);els.raceField.classList.add('active-layer');const boatTitle=sea.querySelector('.boat-title');await wait(900);for(const n of [3,2,1]){boatTitle.textContent=String(n);audio.countdown(n);await wait(650)}boatTitle.textContent='GO!';audio.explosion();await wait(300);boatTitle.textContent='';
+    for(let step=0;step<46;step++){for(const x of data){const raw=match.paths.get(x.r)[step],p=7+(raw/maxFinal)*82;x.boat.style.left=`${p}%`;}if(step%3===0)audio.whoosh();await wait(175);}const win=data.find(x=>x.r===name);win.boat.style.transition='left 1.05s cubic-bezier(.12,.72,.12,1)';win.boat.style.left='96%';await wait(1100);win.lane.classList.add('winner','finish-crossed');fireworks(5,colorForName(name));audio.victorySting();await wait(1300);els.raceField.classList.remove('active-layer');setEvent('WINNER',name);await wait(650);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
   }
 
   async function eventRps(name, seat, pool, studentPool) {
@@ -878,16 +1052,108 @@
     roundLabel.textContent='WINNER';(duel.heroLeft?left:right).classList.add('winner');fireworks(5,colorForName(name));audio.victorySting();await wait(1400);els.cardField.classList.remove('active-layer');setEvent('WINNER',name);await wait(650);setEvent('TARGET LOCK',name,seatLabel(seat),'','top');await wait(620);
   }
 
+
+  function eventCompetitors(name, studentPool, maxPlayers=4, minPlayers=2) {
+    const others=shuffle([...new Set(studentPool.filter(n=>n!==name))]);
+    const wanted=clamp(2+Math.floor(Math.random()*Math.max(1,maxPlayers-1)),minPlayers,maxPlayers);
+    return shuffle([name,...others.slice(0,Math.max(0,wanted-1))]).slice(0,maxPlayers);
+  }
+
+  async function eventBomb(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventCountdown(name,seat);return;}const order=generateBombOrder(players,name);setEvent('BOMB PASS','LAST ONE SAFE');hideEventLayer();const arena=document.createElement('div');arena.className='bomb-arena';const ring=document.createElement('div');ring.className='bomb-ring';arena.appendChild(ring);const nodes=[];players.forEach((player,i)=>{const node=document.createElement('div');node.className='bomb-player';node.style.setProperty('--bomb-color',colorForName(player));node.style.setProperty('--bomb-angle',`${i*360/players.length}deg`);node.innerHTML=`<strong>${escapeHtml(player)}</strong><span></span>`;ring.appendChild(node);nodes.push(node);});const bomb=document.createElement('div');bomb.className='bomb-core';bomb.textContent='●';ring.appendChild(bomb);const timer=document.createElement('div');timer.className='bomb-timer';timer.textContent='5.0';arena.appendChild(timer);els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await wait(850);
+    let alive=players.map((p,i)=>({p,i})),seconds=5.0;for(const loserName of order.slice(0,-1)){const loser=alive.find(x=>x.p===loserName),passes=8+randInt(0,7),start=randInt(0,alive.length-1);for(let k=0;k<passes;k++){const target=alive[(start+k)%alive.length];nodes.forEach(n=>n.classList.remove('holding'));nodes[target.i].classList.add('holding');bomb.style.transform=`translate(-50%,-50%) rotate(${target.i*360/players.length}deg) translateY(-150px)`;timer.textContent=Math.max(.4,seconds-k*.21).toFixed(1);audio.tick(380+k*25,.022);await wait(Math.max(105,250-k*9));}nodes.forEach(n=>n.classList.remove('holding'));nodes[loser.i].classList.add('bombed');bomb.style.transform=`translate(-50%,-50%) rotate(${loser.i*360/players.length}deg) translateY(-150px) scale(1.65)`;audio.explosion();particlesBurst(.5,.5,90,colorForName(loser.p),1.1);screenImpact();await wait(780);alive=alive.filter(x=>x!==loser);seconds=Math.max(1.4,seconds-1.15);}const win=alive[0];nodes[win.i].classList.add('winner');timer.textContent='SAFE';fireworks(5,colorForName(name));audio.victorySting();await wait(1150);els.cardField.classList.remove('active-layer');setEvent('SURVIVOR',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventThrone(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventBattle(name,seat,pool,studentPool);return;}setEvent('THRONE CLASH','CLAIM THE CROWN');hideEventLayer();
+    const rounds=players.length===4?3:2,match=generateThroneMatch(players,name,rounds);const arena=document.createElement('div');arena.className='throne-arena';arena.innerHTML='<div class="throne-crown">♛</div><div class="throne-seat">SEAT THRONE</div><div class="throne-board"></div><div class="throne-log"></div>';const board=arena.querySelector('.throne-board'),log=arena.querySelector('.throne-log');
+    const live=new Map(players.map(p=>[p,0]));players.forEach(p=>{const c=document.createElement('section');c.style.setProperty('--throne-color',colorForName(p));c.innerHTML=`<strong>${escapeHtml(p)}</strong><span>0</span>`;board.appendChild(c);});els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await wait(900);
+    for(let r=0;r<rounds;r++){log.textContent=`ROUND ${r+1}`;for(const p of shuffle(players)){const gain=match.gains.get(p)[r];live.set(p,live.get(p)+gain);const card=board.children[players.indexOf(p)];card.querySelector('span').textContent=live.get(p);card.classList.add('pulse');audio.hit();await wait(350);card.classList.remove('pulse');}}
+    log.textContent='CROWN CLAIMED';board.children[players.indexOf(name)].classList.add('winner');arena.querySelector('.throne-crown').classList.add('claimed');fireworks(6,colorForName(name));audio.victorySting();await wait(1400);els.cardField.classList.remove('active-layer');setEvent('KING OF THE SEAT',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventBowling(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventPinball(name,seat,pool);return;}setEvent('BOWLING','TWO FRAMES');hideEventLayer();
+    const match=generateBowlingMatch(players,name),arena=document.createElement('div');arena.className='bowling-arena';const board=document.createElement('div');board.className='bowling-scoreboard';arena.appendChild(board);const lane=document.createElement('div');lane.className='bowling-lane';lane.innerHTML='<div class="bowling-pins">▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲ ▲</div><div class="bowling-ball"></div><div class="bowling-call">READY</div>';arena.appendChild(lane);els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');
+    const live=new Map(players.map(p=>[p,0]));players.forEach(p=>{const c=document.createElement('section');c.style.setProperty('--bowling-color',colorForName(p));c.innerHTML=`<strong>${escapeHtml(p)}</strong><span>0</span>`;board.appendChild(c);});await wait(900);
+    for(let frame=0;frame<2;frame++){for(const player of players){const pins=match.rolls.get(player)[frame];live.set(player,live.get(player)+pins);lane.querySelector('.bowling-call').textContent=`${player} · ${pins===10?'STRIKE':pins+' PINS'}`;const ball=lane.querySelector('.bowling-ball');ball.style.transition='none';ball.style.left='8%';ball.style.transform='translate(-50%,-50%) rotate(0deg)';await wait(80);ball.style.transition='left .9s cubic-bezier(.15,.78,.2,1), transform .9s linear';ball.style.left='82%';ball.style.transform='translate(-50%,-50%) rotate(720deg)';audio.whoosh();await wait(920);audio.hit();lane.classList.add('pin-hit');board.children[players.indexOf(player)].querySelector('span').textContent=live.get(player);await wait(500);lane.classList.remove('pin-hit');}}
+    board.children[players.indexOf(name)].classList.add('winner');lane.querySelector('.bowling-call').textContent=`WINNER · ${match.scores.get(name)}`;fireworks(5,colorForName(name));audio.victorySting();await wait(1250);els.cardField.classList.remove('active-layer');setEvent('WINNER',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventBasketball(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventPenalty(name,seat,pool,studentPool);return;}setEvent('FREE THROW','5 SHOTS');hideEventLayer();
+    const match=generateBasketballMatch(players,name),arena=document.createElement('div');arena.className='basket-arena';arena.innerHTML='<div class="basket-board"></div><div class="basket-court"><div class="basket-hoop"></div><div class="basket-ball">●</div><div class="basket-call">READY</div></div>';const board=arena.querySelector('.basket-board'),ball=arena.querySelector('.basket-ball'),call=arena.querySelector('.basket-call');els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');
+    players.forEach(player=>{const c=document.createElement('section');c.style.setProperty('--basket-color',colorForName(player));c.innerHTML=`<strong>${escapeHtml(player)}</strong><span>0/5</span>`;board.appendChild(c);});await wait(850);
+    for(const player of players){let hit=0;const seq=match.sequences.get(player);for(let shot=1;shot<=5;shot++){const good=seq[shot-1];call.textContent=`${player} · SHOT ${shot}`;ball.style.transition='none';ball.style.left='22%';ball.style.top='72%';await wait(70);ball.style.transition='left .62s ease, top .62s cubic-bezier(.12,.72,.2,1)';ball.style.left=good?'74%':`${pick([68,80,84])}%`;ball.style.top=good?'31%':`${pick([18,23,39])}%`;audio.whoosh();await wait(650);if(good){hit++;call.textContent='GOOD';audio.confirm();}else{call.textContent='MISS';audio.error();}board.children[players.indexOf(player)].querySelector('span').textContent=`${hit}/5`;await wait(320);}}
+    board.children[players.indexOf(name)].classList.add('winner');call.textContent=`WINNER · ${match.scores.get(name)}/5`;fireworks(5,colorForName(name));audio.victorySting();await wait(1200);els.cardField.classList.remove('active-layer');setEvent('WINNER',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventCannon(name, seat, pool, studentPool) {
+    const others=studentPool.filter(n=>n!==name);if(!others.length){await eventBattle(name,seat,pool,studentPool);return;}const opponent=pick(others),duel=duelOrder(name,opponent),plan=generateCannonPlan(name,opponent);setEvent('CANNON DUEL','FIRE!');hideEventLayer();
+    const arena=document.createElement('div');arena.className='cannon-arena';arena.innerHTML=`<div class="cannon-ship left" style="--ship-color:${colorForName(duel.leftName)}"><strong>${escapeHtml(duel.leftName)}</strong><span>100 HP</span><i></i></div><div class="cannon-sea"></div><div class="cannon-ball"></div><div class="cannon-ship right" style="--ship-color:${colorForName(duel.rightName)}"><strong>${escapeHtml(duel.rightName)}</strong><span>100 HP</span><i></i></div><div class="cannon-call">BROADSIDES READY</div>`;els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');const left=arena.querySelector('.cannon-ship.left'),right=arena.querySelector('.cannon-ship.right'),ball=arena.querySelector('.cannon-ball'),call=arena.querySelector('.cannon-call');const shipFor=p=>p===duel.leftName?left:right;await wait(900);
+    for(const turn of plan.turns){const att=shipFor(turn.attacker),def=shipFor(turn.defender);call.textContent=`${turn.attacker} FIRES`;ball.style.transition='none';ball.style.left=att===left?'25%':'75%';ball.style.top='53%';await wait(80);ball.style.transition='left .58s ease, top .58s ease';ball.style.left=att===left?'72%':'28%';ball.style.top=turn.hit?'48%':`${pick([26,32,67])}%`;audio.explosion();await wait(610);if(turn.hit){def.querySelector('span').textContent=`${turn.hpAfter} HP`;def.classList.add('hit');audio.hit();call.textContent=turn.hpAfter<=0?'DIRECT HIT · SUNK':`HIT · -${turn.dmg}`;await wait(300);def.classList.remove('hit');if(turn.hpAfter<=0){def.classList.add('sunk');break;}}else{call.textContent='MISS';await wait(230);}}
+    shipFor(name).classList.add('winner');call.textContent='SHIP SUNK';particlesBurst(duel.heroLeft?.73:.27,.52,125,colorForName(name),1.3);fireworks(5,colorForName(name));audio.victorySting();await wait(1350);els.cardField.classList.remove('active-layer');setEvent('WINNER',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventTreasure(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2),match=generateTreasureMatch(players,name);setEvent('TREASURE HUNT','OPEN A CHEST');hideEventLayer();const arena=document.createElement('div');arena.className='treasure-arena';const board=document.createElement('div');board.className='treasure-board';arena.appendChild(board);players.forEach(p=>{const card=document.createElement('section');card.style.setProperty('--treasure-color',colorForName(p));card.innerHTML=`<strong>${escapeHtml(p)}</strong><div class="treasure-chest">▰</div><span>?</span>`;board.appendChild(card);});els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await wait(900);
+    for(const p of shuffle(players)){const i=players.indexOf(p),card=board.children[i],score=match.scores.get(p);card.classList.add('opening');audio.lock();await wait(420);card.querySelector('span').textContent=`${score} GOLD`;card.classList.remove('opening');if(score>=90)particlesBurst(.5,.5,36,'#ffe55d',.45);await wait(420);}board.children[players.indexOf(name)].classList.add('winner');fireworks(6,'#ffe55d');audio.victorySting();await wait(1250);els.cardField.classList.remove('active-layer');setEvent('RICHEST',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventTournament(name, seat, pool, studentPool) {
+    let players=eventCompetitors(name,studentPool,4,4);if(players.length<4){await eventThrone(name,seat,pool,studentPool);return;}const plan=generateTournamentPlan(players,name);players=plan.seeded;setEvent('FINAL FOUR','TOURNAMENT');hideEventLayer();const arena=document.createElement('div');arena.className='tournament-arena';arena.innerHTML='<div class="tournament-title">FINAL FOUR</div><div class="bracket"></div><div class="tournament-log">SEMIFINALS</div>';const bracket=arena.querySelector('.bracket'),log=arena.querySelector('.tournament-log');els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');players.forEach((p,i)=>{const c=document.createElement('section');c.style.setProperty('--tour-color',colorForName(p));c.innerHTML=`<small>SEED ${i+1}</small><strong>${escapeHtml(p)}</strong><em></em>`;bracket.appendChild(c);});await wait(1000);
+    const card=p=>[...bracket.children].find(c=>c.querySelector('strong').textContent===p);const play=async(m,label)=>{log.textContent=`${label} · ${m.a} ${m.as} : ${m.bs} ${m.b}`;const ca=card(m.a),cb=card(m.b);ca.classList.add('active');cb.classList.add('active');ca.querySelector('em').textContent=m.as;cb.querySelector('em').textContent=m.bs;for(let i=0;i<5;i++){audio.tick(300+i*45,.025);await wait(220);}ca.classList.remove('active');cb.classList.remove('active');card(m.winner).classList.add('advance');audio.confirm();await wait(650);};
+    await play(plan.semis[0],'SEMIFINAL 1');await play(plan.semis[1],'SEMIFINAL 2');log.textContent='FINAL';await wait(600);await play(plan.final,'CHAMPIONSHIP');card(name).classList.add('champion');log.textContent='CHAMPION';fireworks(8,colorForName(name));audio.victorySting();await wait(1450);els.cardField.classList.remove('active-layer');setEvent('CHAMPION',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+
+  async function eventCurling(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventSpotlight(name,seat,pool);return;}const match=generateCurlingMatch(players,name);setEvent('CURLING','PRECISION HOUSE');hideEventLayer();
+    const arena=document.createElement('div');arena.className='curling-arena';arena.innerHTML='<div class="curling-scoreboard"></div><div class="curling-sheet"><div class="curling-house"><i></i><i></i><i></i><i></i></div><div class="curling-call">HACK READY</div></div>';const board=arena.querySelector('.curling-scoreboard'),sheet=arena.querySelector('.curling-sheet'),house=arena.querySelector('.curling-house'),call=arena.querySelector('.curling-call');players.forEach(p=>{const c=document.createElement('section');c.style.setProperty('--game-color',colorForName(p));c.innerHTML=`<strong>${escapeHtml(p)}</strong><span>0</span>`;board.appendChild(c);});els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await wait(850);
+    const live=new Map(players.map(p=>[p,0]));for(let shot=0;shot<3;shot++){for(const p of players){const st=match.stones.get(p)[shot],stone=document.createElement('div');stone.className='curling-stone';stone.style.setProperty('--stone-color',colorForName(p));stone.innerHTML='<b></b>';sheet.appendChild(stone);const sr=sheet.getBoundingClientRect(),hr=house.getBoundingClientRect(),tx=hr.left-sr.left+(st.x/100)*hr.width,ty=hr.top-sr.top+(st.y/100)*hr.height;call.textContent=`${p} · STONE ${shot+1}`;stone.style.left='7%';stone.style.top='50%';await wait(70);stone.style.transition='left .95s cubic-bezier(.12,.78,.18,1),top .95s ease,transform .95s linear';stone.style.left=`${tx}px`;stone.style.top=`${ty}px`;stone.style.transform='translate(-50%,-50%) rotate(720deg)';audio.whoosh();await wait(980);live.set(p,live.get(p)+st.score);board.children[players.indexOf(p)].querySelector('span').textContent=live.get(p);call.textContent=`${st.score} PRECISION`;audio.confirm();await wait(260);}}
+    board.children[players.indexOf(name)].classList.add('winner');call.textContent=`WINNER · ${match.scores.get(name)}`;fireworks(5,colorForName(name));audio.victorySting();await wait(1200);els.cardField.classList.remove('active-layer');setEvent('CURLING WINNER',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventStocks(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventRain(name,seat,pool);return;}const match=generateStockMatch(players,name);setEvent('STOCK MARKET','CLOSING BELL');hideEventLayer();
+    const arena=document.createElement('div');arena.className='stock-arena';arena.innerHTML='<div class="stock-board"></div><div class="stock-chart"><div class="stock-grid"></div><svg viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="stock-ticker">OPEN · 100.0</div></div>';const board=arena.querySelector('.stock-board'),svg=arena.querySelector('svg'),ticker=arena.querySelector('.stock-ticker');const lines=new Map();players.forEach(p=>{const c=document.createElement('section');c.style.setProperty('--game-color',colorForName(p));c.innerHTML=`<strong>${escapeHtml(p)}</strong><span>100.0</span><small>0.0%</small>`;board.appendChild(c);const line=document.createElementNS('http://www.w3.org/2000/svg','polyline');line.setAttribute('fill','none');line.setAttribute('stroke',colorForName(p));line.setAttribute('stroke-width','1.8');line.setAttribute('vector-effect','non-scaling-stroke');svg.appendChild(line);lines.set(p,line);});els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await wait(900);
+    const point=(v,i,n)=>`${(i/(n-1))*100},${95-clamp((v-35)/150,0,1)*90}`;for(let tick=1;tick<12;tick++){for(const p of players){const path=match.paths.get(p),visible=path.slice(0,tick+1);lines.get(p).setAttribute('points',visible.map((v,i)=>point(v,i,path.length)).join(' '));const price=path[tick],pct=((price/100)-1)*100,card=board.children[players.indexOf(p)];card.querySelector('span').textContent=price.toFixed(1);card.querySelector('small').textContent=`${pct>=0?'+':''}${pct.toFixed(1)}%`;card.classList.toggle('down',pct<0);}ticker.textContent=`TICK ${tick}/11`;audio.tick(310+tick*22,.018);if(tick===5||tick===9)particlesBurst(.5,.45,24,pick(COLORS),.28);await wait(340);}
+    const winnerCard=board.children[players.indexOf(name)];winnerCard.classList.add('winner');ticker.textContent=`MARKET WINNER · ${match.paths.get(name).at(-1).toFixed(1)}`;audio.victorySting();fireworks(6,colorForName(name));await wait(1350);els.cardField.classList.remove('active-layer');setEvent('TOP STOCK',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventBatting(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventBaseball(name,seat,pool,studentPool);return;}const match=generateBattingMatch(players,name);setEvent('BATTING CLASH','5 AT-BATS');hideEventLayer();
+    const arena=document.createElement('div');arena.className='batting-arena';arena.innerHTML='<div class="batting-board"></div><div class="batting-field"><div class="batting-diamond">◇</div><div class="batting-batter">⚾</div><div class="batting-ball">●</div><div class="batting-call">READY</div></div>';const board=arena.querySelector('.batting-board'),field=arena.querySelector('.batting-field'),ball=arena.querySelector('.batting-ball'),call=arena.querySelector('.batting-call');players.forEach(p=>{const c=document.createElement('section');c.style.setProperty('--game-color',colorForName(p));c.innerHTML=`<strong>${escapeHtml(p)}</strong><span>0</span><small></small>`;board.appendChild(c);});els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await wait(850);
+    const live=new Map(players.map(p=>[p,0]));for(const p of players){const seq=match.atBats.get(p);for(let i=0;i<seq.length;i++){const ab=seq[i],card=board.children[players.indexOf(p)];call.textContent=`${p} · AB ${i+1}`;ball.style.transition='none';ball.style.left='50%';ball.style.top='69%';ball.style.opacity='1';await wait(70);const hit=ab.label!=='OUT';ball.style.transition='left .65s ease,top .65s cubic-bezier(.18,.75,.2,1),opacity .65s';ball.style.left=`${50+ab.angle*.65}%`;ball.style.top=hit?`${clamp(65-ab.distance*.55,5,40)}%`:`${pick([42,48,54])}%`;audio.whoosh();await wait(670);live.set(p,live.get(p)+ab.pts);card.querySelector('span').textContent=live.get(p);card.querySelector('small').textContent=ab.label;call.textContent=ab.label==='HR'?'HOME RUN!':ab.label;hit?audio.confirm():audio.error();if(ab.label==='HR')particlesBurst(.5,.35,45,colorForName(p),.55);await wait(300);}}
+    board.children[players.indexOf(name)].classList.add('winner');call.textContent=`WINNER · ${match.scores.get(name)} PTS`;fireworks(5,colorForName(name));audio.victorySting();await wait(1250);els.cardField.classList.remove('active-layer');setEvent('BATTER WINNER',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventTank(name, seat, pool, studentPool) {
+    const others=studentPool.filter(n=>n!==name);if(!others.length){await eventBattle(name,seat,pool,studentPool);return;}const opponent=pick(others),duel=duelOrder(name,opponent),plan=generateTankPlan(name,opponent);setEvent('TANK BATTLE','ARMORED DUEL');hideEventLayer();
+    const arena=document.createElement('div');arena.className='tank-arena';arena.innerHTML=`<div class="tank-unit left" style="--game-color:${colorForName(duel.leftName)}"><strong>${escapeHtml(duel.leftName)}</strong><div class="tank-hp"><i></i></div><span>100 HP</span><b>▰═</b></div><div class="tank-ground"></div><div class="tank-shell">●</div><div class="tank-unit right" style="--game-color:${colorForName(duel.rightName)}"><strong>${escapeHtml(duel.rightName)}</strong><div class="tank-hp"><i></i></div><span>100 HP</span><b>═▰</b></div><div class="tank-call">TARGETING</div>`;const left=arena.querySelector('.tank-unit.left'),right=arena.querySelector('.tank-unit.right'),shell=arena.querySelector('.tank-shell'),call=arena.querySelector('.tank-call'),unitFor=p=>p===duel.leftName?left:right;els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await wait(950);
+    for(const turn of plan.turns){const att=unitFor(turn.attacker),def=unitFor(turn.defender);call.textContent=`${turn.attacker} FIRES`;shell.style.transition='none';shell.style.left=att===left?'22%':'78%';shell.style.top='60%';await wait(80);shell.style.transition='left .62s ease,top .62s cubic-bezier(.12,.7,.18,1)';shell.style.left=att===left?'76%':'24%';shell.style.top=turn.hit?'58%':`${20+turn.arc*30}%`;audio.explosion();await wait(640);if(turn.hit){def.querySelector('span').textContent=`${turn.hpAfter} HP`;def.querySelector('.tank-hp i').style.width=`${turn.hpAfter}%`;def.classList.add('hit');call.textContent=turn.crit?`CRITICAL · -${turn.dmg}`:`HIT · -${turn.dmg}`;audio.hit();await wait(300);def.classList.remove('hit');if(turn.hpAfter<=0){def.classList.add('destroyed');audio.explosion();particlesBurst(def===left?.25:.75,.56,100,'#ff8a34',1.1);break;}}else{call.textContent='MISS';await wait(220);}}
+    unitFor(name).classList.add('winner');call.textContent='VICTORY';fireworks(6,colorForName(name));audio.victorySting();await wait(1350);els.cardField.classList.remove('active-layer');setEvent('TANK ACE',name,seatLabel(seat),'','top');await wait(620);
+  }
+
+  async function eventCooking(name, seat, pool, studentPool) {
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventCards(name,seat,pool);return;}const match=generateCookingMatch(players,name),categories=['TASTE','TECHNIQUE','PRESENTATION'];setEvent('COOK-OFF','THREE JUDGES');hideEventLayer();
+    const arena=document.createElement('div');arena.className='cooking-arena';arena.innerHTML='<div class="cooking-board"></div><div class="cooking-stage"><div class="cooking-pan">◒</div><div class="cooking-steam">♨</div><div class="cooking-call">MISE EN PLACE</div></div>';const board=arena.querySelector('.cooking-board'),call=arena.querySelector('.cooking-call'),pan=arena.querySelector('.cooking-pan');players.forEach(p=>{const c=document.createElement('section');c.style.setProperty('--game-color',colorForName(p));c.innerHTML=`<strong>${escapeHtml(p)}</strong><em>${match.dishes.get(p)}</em><div><span>--</span><span>--</span><span>--</span></div><b>0</b>`;board.appendChild(c);});els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await wait(900);
+    for(let round=0;round<3;round++){call.textContent=categories[round];for(const p of shuffle(players)){const score=match.scores.get(p)[round],card=board.children[players.indexOf(p)];card.querySelectorAll('span')[round].textContent=score;card.querySelector('b').textContent=match.scores.get(p).slice(0,round+1).reduce((a,b)=>a+b,0);card.classList.add('judged');pan.style.setProperty('--pan-color',colorForName(p));audio.confirm();particlesBurst(.5,.48,16,colorForName(p),.2);await wait(370);card.classList.remove('judged');}await wait(250);}
+    board.children[players.indexOf(name)].classList.add('winner');call.textContent=`CHEF WINNER · ${match.totals.get(name)}`;fireworks(6,colorForName(name));audio.victorySting();await wait(1350);els.cardField.classList.remove('active-layer');setEvent('MASTER CHEF',name,seatLabel(seat),'','top');await wait(620);
+  }
+
   async function themedSeatLanding(type, seat, name, mega=false) {
     const p=getSeatPoint(seat);if(!p)return;const rect=els.cinemaStage.getBoundingClientRect();
     if(type==='drop'||type==='final'){
       els.dropName.textContent=name;els.dropName.style.left=`${p.x}px`;els.dropName.style.top=`${p.y}px`;els.dropName.style.fontSize=mega?'clamp(54px,7.5vw,145px)':'clamp(38px,5vw,92px)';els.dropName.className='drop-name fall-seat name-only';audio.whoosh();await wait(760);return;
     }
-    const icons={slot:'◉',laser:'⌖',cards:'◆',rain:'✦',glitch:'▣',countdown:'●',rgb:'RGB',lightning:'⚡',battle:'✹',race:'🐎',dart:'➤',spotlight:'✦',elimination:'★',pinball:'●',conveyor:'▰',meteor:'☄',tug:'◆',sprint:'➜',rocket:'🚀',penalty:'⚽',archery:'➳',sumo:'✹',boat:'⛵',rps:'✊',poker:'♠',baseball:'⚾',dice:'⚅'};
+    const icons={slot:'◉',laser:'⌖',cards:'◆',rain:'✦',glitch:'▣',countdown:'●',rgb:'RGB',lightning:'⚡',battle:'✹',race:'🐎',dart:'➤',spotlight:'✦',elimination:'★',pinball:'●',conveyor:'▰',meteor:'☄',tug:'◆',sprint:'➜',rocket:'🚀',penalty:'⚽',archery:'➳',sumo:'✹',boat:'⛵',rps:'✊',poker:'♠',baseball:'⚾',dice:'⚅',bomb:'💣',throne:'♛',bowling:'●',basketball:'●',cannon:'✹',treasure:'◆',tournament:'★',curling:'●',stocks:'↗',batting:'⚾',tank:'▰',cooking:'♨'};
     const proj=document.createElement('div');proj.className=`seat-projectile project-${type}`;if(type==='dart'){proj.innerHTML='<i></i><b></b>';}else proj.textContent=icons[type]||'◆';els.cinemaStage.appendChild(proj);
     let sx=rect.width*.5,sy=-80,rot=0;
     if(['race','sprint','boat'].includes(type)){sx=-90;sy=p.y;rot=0;}
-    if(type==='rps'||type==='poker'||type==='dice'){sx=rect.width*.5;sy=rect.height*.18;rot=0;}
+    if(['rps','poker','dice','treasure','tournament','stocks','cooking'].includes(type)){sx=rect.width*.5;sy=rect.height*.18;rot=0;}
+    if(['bowling','basketball','cannon','bomb','curling','batting','tank'].includes(type)){sx=rect.width*.12;sy=rect.height*.68;rot=0;}
+    if(type==='throne'){sx=p.x;sy=-90;rot=0;}
     if(type==='baseball'){sx=rect.width*.13;sy=rect.height*.7;rot=0;}
     if(type==='rocket'){sx=p.x;sy=rect.height+110;rot=0;}
     if(type==='dart'||type==='archery'){sx=rect.width+120;sy=rect.height*.22;rot=180;}
@@ -900,7 +1166,18 @@
     const dx=p.x-sx,dy=p.y-sy;const angle=Math.atan2(dy,dx)*180/Math.PI;
     if(['dart','archery','sprint'].includes(type))rot=angle;
     const duration=mega?980:(type==='rocket'?900:type==='dart'?850:type==='race'?920:760);
-    const middle= type==='pinball' ? [{transform:`translate(-50%,-50%) translate(${dx*.45}px,${dy*.15-90}px) rotate(${angle}deg) scale(1.2)`}] : [];
+    let middle=[];
+    if(type==='pinball')middle=[{transform:`translate(-50%,-50%) translate(${dx*.45}px,${dy*.15-90}px) rotate(${angle}deg) scale(1.2)`}];
+    else if(type==='basketball')middle=[{transform:`translate(-50%,-50%) translate(${dx*.52}px,${dy*.35-145}px) rotate(${angle+220}deg) scale(1.05)`}];
+    else if(type==='bowling')middle=[{transform:`translate(-50%,-50%) translate(${dx*.58}px,${dy*.72}px) rotate(540deg) scale(.95)`}];
+    else if(type==='cannon')middle=[{transform:`translate(-50%,-50%) translate(${dx*.52}px,${dy*.42-85}px) scale(1.18)`}];
+    else if(type==='bomb')middle=[{transform:`translate(-50%,-50%) translate(${dx*.5}px,${dy*.4-70}px) rotate(360deg) scale(1.45)`}];
+    else if(type==='throne')middle=[{transform:`translate(-50%,-50%) translate(${dx*.5}px,${dy*.48}px) rotate(-18deg) scale(1.4)`}];
+    else if(type==='curling')middle=[{transform:`translate(-50%,-50%) translate(${dx*.58}px,${dy*.82}px) rotate(540deg) scale(.95)`}];
+    else if(type==='batting')middle=[{transform:`translate(-50%,-50%) translate(${dx*.45}px,${dy*.2-110}px) rotate(360deg) scale(.9)`}];
+    else if(type==='tank')middle=[{transform:`translate(-50%,-50%) translate(${dx*.5}px,${dy*.35-60}px) rotate(0deg) scale(1.1)`}];
+    else if(type==='stocks')middle=[{transform:`translate(-50%,-50%) translate(${dx*.5}px,${dy*.3-80}px) scale(1.25)`}];
+    else if(type==='cooking')middle=[{transform:`translate(-50%,-50%) translate(${dx*.5}px,${dy*.4-45}px) rotate(12deg) scale(1.2)`}];
     audio.whoosh();
     try{const frames=[{transform:`translate(-50%,-50%) rotate(${rot}deg) scale(${type==='rocket'?1.5:1})`,opacity:1},...middle,{transform:`translate(-50%,-50%) translate(${dx}px,${dy}px) rotate(${angle}deg) scale(${mega?1.35:.82})`,opacity:1}];await proj.animate(frames,{duration,easing:'cubic-bezier(.16,.82,.18,1)',fill:'forwards'}).finished;}catch(_){proj.style.left=`${p.x}px`;proj.style.top=`${p.y}px`;await wait(duration);}
     proj.classList.add('impacting');await wait(80);proj.remove();
@@ -1002,11 +1279,20 @@
     const locked=new Set(state.locks.values()),candidates=shuffle([...revealed.entries()].filter(([s])=>!locked.has(s)));if(candidates.length<2)return false;const [a,b]=candidates.slice(0,2);clearTransient();setEventColor('#36e7ff');setEvent('MYSTERY SWITCH','INCOMING',`${seatMini(a[0])} · ${escapeHtml(a[1])}   ⇄   ${seatMini(b[0])} · ${escapeHtml(b[1])}`);audio.glitch();await wait(2300);for(let i=0;i<8;i++){els.eventTitle.textContent=i%2?'???':'SWITCH';await wait(130);}hideEventLayer();const ok=await animateChaosExchange(revealed,a[0],b[0],'MYSTERY');if(ok){fireworks(6,'#36e7ff');els.swapField.classList.add('active-layer');const done=document.createElement('div');done.className='chaos-result';done.innerHTML=`<strong>MYSTERY SWITCH</strong><span>${escapeHtml(a[1])} → ${seatMini(b[0])}</span><small>${escapeHtml(b[1])} → ${seatMini(a[0])}</small>`;els.swapField.appendChild(done);await wait(2300);els.swapField.classList.remove('active-layer');els.swapField.innerHTML='';state.swapCount++;state.chaosCount++;}return ok;
   }
 
+
+  async function chainSwapEvent(revealed) {
+    const locked=new Set(state.locks.values()),candidates=shuffle([...revealed.entries()].filter(([s])=>!locked.has(s)));if(candidates.length<4)return tripleRotationEvent(revealed);const picks=candidates.slice(0,4);clearTransient();setEventColor('#52f5a4');hideEventLayer();els.swapField.classList.add('active-layer');
+    const board=document.createElement('div');board.className='chain-swap-board';board.innerHTML=`<div class="takeover-title">CHAIN SWAP</div><div class="takeover-target">FOUR SEATS ROTATE</div><div class="chain-list">${picks.map(([s,n],i)=>`<section><small>${seatMini(s)}</small><strong>${escapeHtml(n)}</strong><b>→</b></section>`).join('')}</div>`;els.swapField.appendChild(board);audio.warning();fireworks(5,'#52f5a4');await wait(3200);els.swapField.classList.remove('active-layer');els.swapField.innerHTML='';
+    const points=picks.map(([s])=>getSeatPoint(s));if(points.some(p=>!p))return false;els.cinemaSeats.classList.add('swap-dim');const ghosts=picks.map(([s,n],i)=>{const g=document.createElement('div');g.className='swap-ghost chain-ghost';g.textContent=n;g.style.left=`${points[i].x}px`;g.style.top=`${points[i].y}px`;g.style.setProperty('--ghost-color',colorForName(n));els.cinemaStage.appendChild(g);return g;});audio.whoosh();
+    const anims=ghosts.map((g,i)=>{const from=points[i],to=points[(i+1)%4],dx=to.x-from.x,dy=to.y-from.y;return g.animate([{transform:'translate(-50%,-50%) scale(1)'},{transform:`translate(calc(-50% + ${dx*.5}px),calc(-50% + ${dy*.5-80}px)) scale(1.18) rotate(180deg)`},{transform:`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) rotate(360deg)`}],{duration:2100,easing:'cubic-bezier(.2,.78,.22,1)',fill:'forwards'}).finished;});await Promise.allSettled(anims);ghosts.forEach(g=>g.remove());const names=picks.map(([,n])=>n);for(let i=0;i<4;i++){const seat=picks[(i+1)%4][0],n=names[i];revealed.set(seat,n);state.assignment.set(seat,n);}els.cinemaSeats.classList.remove('swap-dim');renderCinemaSeats(revealed);points.forEach((_,i)=>{const p=getSeatPoint(picks[i][0]);if(p){impactWaves(p.nx,p.ny,4,55);fireworksAt(p.nx,p.ny,3,colorForName(revealed.get(picks[i][0])));}});audio.impact(true);screenImpact();await wait(1000);els.swapField.classList.add('active-layer');const done=document.createElement('div');done.className='chaos-result';done.innerHTML='<strong>CHAIN SWAP COMPLETE</strong><span>4 SEATS ROTATED</span>';els.swapField.appendChild(done);await wait(2200);els.swapField.classList.remove('active-layer');els.swapField.innerHTML='';state.swapCount++;state.chaosCount++;return true;
+  }
+
   async function runChaosMutation(revealed) {
     const roll=Math.random();
-    if(roll<.42)return seatTakeoverEvent(revealed);
-    if(roll<.72){const ok=await swapAssignedSeats(revealed);if(ok)state.chaosCount++;return ok;}
-    if(roll<.86)return tripleRotationEvent(revealed);
+    if(roll<.30)return seatTakeoverEvent(revealed);
+    if(roll<.54){const ok=await swapAssignedSeats(revealed);if(ok)state.chaosCount++;return ok;}
+    if(roll<.70)return chainSwapEvent(revealed);
+    if(roll<.84)return tripleRotationEvent(revealed);
     return mysterySwitchEvent(revealed);
   }
 
@@ -1058,12 +1344,12 @@
   }
 
   function resizeCanvas() {
-    const r=els.cinemaStage.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);els.fxCanvas.width=Math.round(r.width*dpr);els.fxCanvas.height=Math.round(r.height*dpr);els.fxCanvas.style.width=`${r.width}px`;els.fxCanvas.style.height=`${r.height}px`;const ctx=els.fxCanvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    const r=els.cinemaStage.getBoundingClientRect(),dpr=Math.min(LOW_POWER?1.25:1.75,window.devicePixelRatio||1);els.fxCanvas.width=Math.round(r.width*dpr);els.fxCanvas.height=Math.round(r.height*dpr);els.fxCanvas.style.width=`${r.width}px`;els.fxCanvas.style.height=`${r.height}px`;const ctx=els.fxCanvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
   }
 
   function particlesBurst(nx=.5,ny=.5,count=60,color=null,power=1) {
-    const rect=els.cinemaStage.getBoundingClientRect();
-    for(let i=0;i<count;i++){const a=Math.random()*Math.PI*2,speed=(85+Math.random()*390)*power;state.particles.push({x:rect.width*nx,y:rect.height*ny,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed-45*power,life:.7+Math.random()*1.15,max:1.85,size:1+Math.random()*4.8,color:color||pick(COLORS),gravity:190+Math.random()*250,trail:Math.random()<.32});}
+    const rect=els.cinemaStage.getBoundingClientRect(),remaining=Math.max(0,PARTICLE_CAP-state.particles.length),scaled=Math.min(remaining,Math.max(0,Math.round(count*FX_SCALE)));if(!scaled)return;
+    for(let i=0;i<scaled;i++){const a=Math.random()*Math.PI*2,speed=(85+Math.random()*390)*power;state.particles.push({x:rect.width*nx,y:rect.height*ny,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed-45*power,life:.7+Math.random()*1.05,max:1.75,size:1+Math.random()*4.2,color:color||pick(COLORS),gravity:190+Math.random()*250,trail:Math.random()<.28});}
   }
 
   function fireworks(count=3,color=null){for(let i=0;i<count;i++)setTimeout(()=>{const x=.12+Math.random()*.76,y=.15+Math.random()*.55;particlesBurst(x,y,55+Math.floor(Math.random()*48),color||pick(COLORS),.9+Math.random()*.75);audio.firework();},i*155)}
@@ -1071,7 +1357,7 @@
 
   function fxLoop(){
     const ctx=els.fxCanvas.getContext('2d'),rect=els.cinemaStage.getBoundingClientRect(),dt=.016;ctx.clearRect(0,0,rect.width,rect.height);state.particles=state.particles.filter(p=>p.life>0);
-    for(const p of state.particles){p.life-=dt;p.vy+=p.gravity*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.992;ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=13;if(p.trail)ctx.fillRect(p.x,p.y,p.size*3.6,p.size*.8);else{ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();}}
+    for(const p of state.particles){p.life-=dt;p.vy+=p.gravity*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.992;ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=LOW_POWER?5:(state.particles.length>600?7:12);if(p.trail)ctx.fillRect(p.x,p.y,p.size*3.6,p.size*.8);else{ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();}}
     ctx.globalAlpha=1;ctx.shadowBlur=0;state.raf=requestAnimationFrame(fxLoop);
   }
 
@@ -1102,7 +1388,7 @@
     const marginX=90,top=175,bottom=80,boardH=54,gap=14;const areaW=1920-marginX*2,areaH=1080-top-bottom;ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=2;roundRect(ctx,560,top,800,boardH,12);ctx.stroke();ctx.fillStyle='#a0a4ae';ctx.textAlign='center';ctx.font='900 18px system-ui, sans-serif';ctx.fillText('BLACKBOARD',960,top+34);ctx.textAlign='left';
     const gridTop=top+boardH+30,gridH=areaH-boardH-30;const cellW=(areaW-gap*(state.cols-1))/state.cols,cellH=(gridH-gap*(state.rows-1))/state.rows;const lockMap=lockBySeat();
     for(const id of seatIds()){const {row,col}=seatRC(id),x=marginX+(col-1)*(cellW+gap),y=gridTop+(row-1)*(cellH+gap);if(state.inactive.has(id)){ctx.save();ctx.globalAlpha=.08;ctx.strokeStyle='#ffffff';ctx.setLineDash([8,8]);roundRect(ctx,x,y,cellW,cellH,14);ctx.stroke();ctx.restore();continue;}const person=state.assignment.get(id)||lockMap.get(id)||'';const color=person?colorForName(person):'#777b85';ctx.fillStyle='#090a0f';roundRect(ctx,x,y,cellW,cellH,14);ctx.fill();ctx.strokeStyle=person?color:'rgba(255,255,255,.16)';ctx.lineWidth=person?3:1.5;ctx.stroke();ctx.fillStyle='#858995';ctx.font=`800 ${Math.max(13,Math.min(20,cellH*.13))}px system-ui, sans-serif`;ctx.fillText(`SEAT ${String(id).padStart(2,'0')}`,x+16,y+26);ctx.fillStyle=person?'#ffffff':'#555966';ctx.textAlign='center';const fs=Math.max(22,Math.min(56,cellH*.42,cellW/(Math.max(3,person.length)*.72)));ctx.font=`1000 ${fs}px system-ui, sans-serif`;ctx.fillText(person||'',x+cellW/2,y+cellH*.66);ctx.textAlign='left';}
-    ctx.fillStyle='#5d626e';ctx.font='700 14px system-ui, sans-serif';ctx.fillText('SEAT // CINEMATIC DRAW V12',90,1040);
+    ctx.fillStyle='#5d626e';ctx.font='700 14px system-ui, sans-serif';ctx.fillText('SEAT // CINEMATIC DRAW V14',90,1040);
     canvas.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),a=document.createElement('a');const now=new Date();a.href=url;a.download=`SEAT_DRAW_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.png`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);},'image/png');
   }
 
