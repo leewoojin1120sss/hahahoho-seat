@@ -43,7 +43,7 @@
     ['tournament','FINAL FOUR','TOURNAMENT','4P','Two semifinals lead into a championship.'],
     ['curling','CURLING','PRECISION','2-4P','Three stones each score by distance to center.'],
     ['stocks','STOCK MARKET','SCORE','2-4P','Random market paths race to the closing bell.'],
-    ['batting','BATTING CLASH','SCORE','2-4P','Five randomized at-bats per player.'],
+    ['batting','BATTING CLASH','SCORE','2-4P','Three animated at-bats with live base running.'],
     ['tank','TANK BATTLE','DUEL','2P','Turn-based shell hits reduce visible HP.'],
     ['cooking','COOK-OFF','SCORE','2-4P','Prep, cook, plate and judge each dish.']
   ];
@@ -404,13 +404,32 @@
     });
   }
 
-  const BATTING_OUTCOMES=[['OUT',.37,0],['1B',.21,1],['2B',.16,2],['3B',.06,3],['HR',.20,4]];
+  const BATTING_OUTCOMES=[['OUT',.34,0],['1B',.28,1],['2B',.19,2],['3B',.06,3],['HR',.13,4]];
   function randomBattingOutcome(){const key=weightedPick(BATTING_OUTCOMES.map(([k,w])=>[k,w]));return BATTING_OUTCOMES.find(x=>x[0]===key);}
+  function simulateBattingSequence(){
+    let bases=[false,false,false],runs=0,outs=0,totalBases=0;const seq=[];
+    for(let i=0;i<3;i++){
+      const [label,,hitBases]=randomBattingOutcome();let runsOnPlay=0;
+      if(label==='OUT'){outs++;}
+      else{
+        totalBases+=hitBases;
+        if(hitBases===4){runsOnPlay=bases.filter(Boolean).length+1;bases=[false,false,false];}
+        else{
+          const next=[false,false,false];
+          for(let b=2;b>=0;b--){if(!bases[b])continue;const dest=(b+1)+hitBases;if(dest>3)runsOnPlay++;else next[dest-1]=true;}
+          next[hitBases-1]=true;bases=next;
+        }
+        runs+=runsOnPlay;
+      }
+      seq.push({label,hitBases,angle:randInt(-38,38),distance:label==='HR'?randInt(88,100):label==='OUT'?randInt(44,74):randInt(55,86),runsOnPlay,runs,outs,totalBases,basesAfter:[...bases]});
+    }
+    return {seq,runs,outs,totalBases,rank:runs*100+totalBases};
+  }
   function generateBattingMatch(players, featured) {
-    return uniqueFeaturedWinner(players,featured,(d,p)=>d.scores.get(p),()=>{
-      const atBats=new Map(),scores=new Map();
-      players.forEach(p=>{const seq=Array.from({length:5},()=>{const [label,,pts]=randomBattingOutcome();return {label,pts,angle:randInt(-42,42),distance:label==='HR'?randInt(82,100):label==='OUT'?randInt(35,74):randInt(52,84)};});atBats.set(p,seq);scores.set(p,seq.reduce((s,x)=>s+x.pts,0));});
-      return {atBats,scores};
+    return uniqueFeaturedWinner(players,featured,(d,p)=>d.ranks.get(p),()=>{
+      const atBats=new Map(),scores=new Map(),totalBases=new Map(),ranks=new Map();
+      players.forEach(p=>{const sim=simulateBattingSequence();atBats.set(p,sim.seq);scores.set(p,sim.runs);totalBases.set(p,sim.totalBases);ranks.set(p,sim.rank);});
+      return {atBats,scores,totalBases,ranks};
     });
   }
 
@@ -1188,10 +1207,35 @@
   }
 
   async function eventBatting(name, seat, pool, studentPool) {
-    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventBaseball(name,seat,pool,studentPool);return;}const match=generateBattingMatch(players,name);setEvent('BATTING CLASH','5 AT-BATS');hideEventLayer();
-    const arena=document.createElement('div');arena.className='batting-arena';arena.innerHTML='<div class="batting-board"></div><div class="batting-field"><div class="batting-diamond">◇</div><div class="batting-batter">⚾</div><div class="batting-ball">●</div><div class="batting-call">READY</div></div>';const board=arena.querySelector('.batting-board'),field=arena.querySelector('.batting-field'),ball=arena.querySelector('.batting-ball'),call=arena.querySelector('.batting-call');players.forEach(p=>{const c=document.createElement('section');c.style.setProperty('--game-color',colorForName(p));c.innerHTML=`<strong>${escapeHtml(p)}</strong><span>0</span><small></small>`;board.appendChild(c);});els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await gameWait(1050,players);
-    const live=new Map(players.map(p=>[p,0]));for(const p of players){const seq=match.atBats.get(p);for(let i=0;i<seq.length;i++){const ab=seq[i],card=board.children[players.indexOf(p)];call.textContent=`${p} · AB ${i+1}`;ball.style.transition='none';ball.style.left='50%';ball.style.top='69%';ball.style.opacity='1';await gameWait(140,players);const hit=ab.label!=='OUT';ball.style.transition='left .65s ease,top .65s cubic-bezier(.18,.75,.2,1),opacity .65s';ball.style.left=`${50+ab.angle*.65}%`;ball.style.top=hit?`${clamp(65-ab.distance*.55,5,40)}%`:`${pick([42,48,54])}%`;audio.whoosh();await gameWait(730,players);live.set(p,live.get(p)+ab.pts);card.querySelector('span').textContent=live.get(p);card.querySelector('small').textContent=ab.label;call.textContent=ab.label==='HR'?'HOME RUN!':ab.label;hit?audio.confirm():audio.error();if(ab.label==='HR')particlesBurst(.5,.35,45,colorForName(p),.55);await gameWait(500,players);}}
-    board.children[players.indexOf(name)].classList.add('winner');call.textContent=`WINNER · ${match.scores.get(name)} PTS`;fireworks(5,colorForName(name));audio.victorySting();await gameWait(1550,players);els.cardField.classList.remove('active-layer');setEvent('BATTER WINNER',name,seatLabel(seat),'','top');await wait(700);
+    const players=eventCompetitors(name,studentPool,4,2);if(players.length<2){await eventBaseball(name,seat,pool,studentPool);return;}const match=generateBattingMatch(players,name);setEvent('BATTING CLASH','3 AT-BATS · BASE RUNNING');hideEventLayer();
+    const arena=document.createElement('div');arena.className='batting-arena batting-v151';arena.innerHTML='<div class="batting-board"></div><div class="batting-field"><div class="batting-cut left"></div><div class="batting-cut right"></div><div class="batting-base base-second" data-base="2"><b>2</b></div><div class="batting-base base-third" data-base="3"><b>3</b></div><div class="batting-base base-first" data-base="1"><b>1</b></div><div class="batting-home">HOME</div><div class="batting-pitcher"><i></i><small>P</small></div><div class="batting-batter"><i></i><b></b></div><div class="batting-ball"></div><div class="batting-runner"></div><div class="batting-outs">OUTS <b>○ ○ ○</b></div><div class="batting-call">READY</div></div>';
+    const board=arena.querySelector('.batting-board'),field=arena.querySelector('.batting-field'),ball=arena.querySelector('.batting-ball'),runner=arena.querySelector('.batting-runner'),batter=arena.querySelector('.batting-batter'),call=arena.querySelector('.batting-call'),outsLabel=arena.querySelector('.batting-outs b'),baseNodes=[...arena.querySelectorAll('.batting-base')];
+    players.forEach(p=>{const c=document.createElement('section');c.style.setProperty('--game-color',colorForName(p));c.innerHTML=`<strong>${escapeHtml(p)}</strong><span>0 R</span><small>TB 0 · AB 0/3</small>`;board.appendChild(c);});els.cardField.appendChild(arena);els.cardField.classList.add('active-layer');await gameWait(1150,players);
+    const pos={home:[50,84],1:[68,62],2:[50,38],3:[32,62]};
+    const setBases=(occupied,color)=>{baseNodes.forEach((node,i)=>{node.classList.toggle('occupied',!!occupied[i]);node.style.setProperty('--runner-color',color);});};
+    const moveRunner=async(base,color)=>{runner.style.setProperty('--runner-color',color);runner.style.opacity='1';runner.style.left=`${pos[base][0]}%`;runner.style.top=`${pos[base][1]}%`;await gameWait(300,players);};
+    for(const p of players){
+      const seq=match.atBats.get(p),card=board.children[players.indexOf(p)],color=colorForName(p);let previousBases=[false,false,false];board.querySelectorAll('section').forEach(x=>x.classList.remove('active-batter'));card.classList.add('active-batter');setBases(previousBases,color);outsLabel.textContent='○ ○ ○';
+      for(let i=0;i<seq.length;i++){
+        const ab=seq[i];call.textContent=`${p} · AT BAT ${i+1} / 3`;card.querySelector('small').textContent=`TB ${ab.totalBases-(ab.hitBases||0)} · AB ${i+1}/3`;
+        batter.classList.remove('swing');ball.classList.remove('hit-ball');ball.style.transition='none';ball.style.opacity='1';ball.style.left='50%';ball.style.top='44%';ball.style.transform='translate(-50%,-50%) scale(.72)';runner.style.transition='none';runner.style.left='50%';runner.style.top='84%';runner.style.opacity='0';await gameWait(350,players);
+        call.textContent='PITCH';audio.tick(470,.026);ball.style.transition=`top ${.38*multiplayerPace(players)}s cubic-bezier(.25,.7,.25,1),transform ${.38*multiplayerPace(players)}s`;ball.style.top='78%';ball.style.transform='translate(-50%,-50%) scale(1)';await gameWait(390,players);
+        batter.classList.add('swing');audio.whoosh();await gameWait(150,players);
+        const hit=ab.label!=='OUT';ball.classList.add('hit-ball');ball.style.transition=`left ${.72*multiplayerPace(players)}s ease-out,top ${.72*multiplayerPace(players)}s cubic-bezier(.1,.7,.2,1),transform ${.72*multiplayerPace(players)}s linear,opacity ${.72*multiplayerPace(players)}s`;ball.style.left=`${clamp(50+ab.angle*.68,18,82)}%`;ball.style.top=hit?`${clamp(65-ab.distance*.57,5,35)}%`:`${pick([31,38,45])}%`;ball.style.transform='translate(-50%,-50%) scale(.55) rotate(540deg)';ball.style.opacity=ab.label==='OUT'?'.55':'1';await gameWait(740,players);
+        if(!hit){
+          call.textContent='OUT!';audio.error();outsLabel.textContent=`${'● '.repeat(ab.outs).trim()}${ab.outs<3?' '+ '○ '.repeat(3-ab.outs).trim():''}`;card.querySelector('span').textContent=`${ab.runs} R`;card.querySelector('small').textContent=`TB ${ab.totalBases} · ${ab.label} · AB ${i+1}/3`;field.classList.add('out-flash');await gameWait(700,players);field.classList.remove('out-flash');
+        }else{
+          call.textContent=ab.label==='HR'?'HOME RUN!':`${ab.label} · RUN!`;audio.confirm();runner.style.transition=`left ${.3*multiplayerPace(players)}s ease,top ${.3*multiplayerPace(players)}s ease,transform ${.3*multiplayerPace(players)}s`;runner.style.transform='translate(-50%,-50%) scale(1)';await moveRunner('home',color);
+          const steps=ab.hitBases===4?[1,2,3,'home']:Array.from({length:ab.hitBases},(_,k)=>k+1);
+          for(const step of steps){await moveRunner(step,color);audio.tick(560+(step==='home'?4:step)*55,.02);const base=step==='home'?null:baseNodes.find(n=>Number(n.dataset.base)===step);if(base){base.classList.add('step-hit');setTimeout(()=>base.classList.remove('step-hit'),260);}}
+          runner.style.opacity='0';setBases(ab.basesAfter,color);card.querySelector('span').textContent=`${ab.runs} R`;card.querySelector('small').textContent=`TB ${ab.totalBases} · ${ab.label} · AB ${i+1}/3`;if(ab.runsOnPlay>0){call.textContent=ab.label==='HR'?`HOME RUN · +${ab.runsOnPlay} RUN${ab.runsOnPlay>1?'S':''}`:`${ab.label} · +${ab.runsOnPlay} RUN${ab.runsOnPlay>1?'S':''}`;particlesBurst(.5,.42,ab.label==='HR'?58:30,color,.5);}
+          await gameWait(650,players);
+        }
+        previousBases=ab.basesAfter;await gameWait(300,players);
+      }
+      card.classList.remove('active-batter');setBases([false,false,false],color);runner.style.opacity='0';await gameWait(450,players);
+    }
+    const winnerCard=board.children[players.indexOf(name)];winnerCard.classList.add('winner');call.textContent=`WINNER · ${match.scores.get(name)} RUN${match.scores.get(name)===1?'':'S'} · TB ${match.totalBases.get(name)}`;fireworks(5,colorForName(name));audio.victorySting();await gameWait(1750,players);els.cardField.classList.remove('active-layer');setEvent('BATTING WINNER',name,seatLabel(seat),'','top');await wait(700);
   }
 
   async function eventTank(name, seat, pool, studentPool) {
