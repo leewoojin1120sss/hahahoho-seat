@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>SEAT // CINEMATIC DRAW V14</title>
+  <title>SEAT // CINEMATIC DRAW V15</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,7 +12,7 @@
     <section id="setupView" class="setup-view" aria-label="자리배정 설정">
       <header class="app-header">
         <div>
-          <p class="kicker">SEAT ASSIGNMENT SHOW // V14</p>
+          <p class="kicker">SEAT ASSIGNMENT SHOW // V15</p>
           <h1>SEAT // CINEMATIC DRAW</h1>
           <p class="header-copy">Set the classroom. Lock seats. Then let the show begin.</p>
         </div>
@@ -140,9 +140,21 @@
           <p class="microcopy">한 줄에 한 짝씩 <b>이름1, 이름2</b> 형식. 마지막 줄은 좌석 제거로 한 명만 남겨도 됩니다.</p>
         </section>
 
+        <section class="panel archive-panel">
+          <div class="panel-head">
+            <div><span class="panel-index">06</span><h2>GAME ARCHIVE</h2></div>
+            <strong>40 EVENTS</strong>
+          </div>
+          <div class="archive-preview">
+            <div><b>40</b><span>ASSIGNMENT EVENTS</span></div>
+            <p>현재 탑재된 모든 게임과 연출을 한 화면에서 확인합니다.</p>
+          </div>
+          <button id="archiveButton" class="secondary-button archive-button" type="button">OPEN GAME ARCHIVE</button>
+        </section>
+
         <section class="panel launch-panel">
           <div class="launch-copy">
-            <span class="panel-index">06</span>
+            <span class="panel-index">07</span>
             <h2>CINEMATIC DRAW</h2>
             <p>16:9 full cinematic draw mode.</p>
           </div>
@@ -160,6 +172,13 @@
         </section>
       </div>
     </section>
+
+    <div id="archiveModal" class="game-archive-modal" hidden>
+      <section class="game-archive-dialog" role="dialog" aria-modal="true" aria-labelledby="archiveTitle">
+        <header><div><span>GAME ARCHIVE // V15</span><h2 id="archiveTitle">40 ASSIGNMENT EVENTS</h2><p>추첨용 이벤트 40종. 스왑은 별도의 CHAOS 시스템으로 관리됩니다.</p></div><button id="archiveCloseButton" type="button" aria-label="게임 아카이브 닫기">×</button></header>
+        <div id="archiveGrid" class="archive-grid"></div>
+      </section>
+    </div>
 
     <section id="cinemaView" class="cinema-view" aria-label="시네마틱 자리 추첨" hidden>
       <div id="cinemaStage" class="cinema-stage">
